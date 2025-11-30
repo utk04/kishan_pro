@@ -1,3 +1,4 @@
+// src/pages/StudentDashboard.jsx
 import React, { useState, useEffect, useRef } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -5,14 +6,80 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
 import { getData, saveData } from "../utils/storage";
 
-/* small skills vocab kept same as before */
+/* small skills vocab kept same as before (used for resume extraction) */
 const SKILLS_VOCAB = [
-  "react", "javascript", "node", "node.js", "html", "css", "tailwind",
-  "figma", "java", "python", "c++", "c", "sql", "mongodb",
-  "express", "typescript"
+  // ---------- FRONTEND ----------
+  "react", "javascript", "typescript", "html", "css", "sass", "scss",
+  "tailwind", "bootstrap", "material ui", "redux", "nextjs",
+  "vue", "vue.js", "nuxt", "angular", "angularjs", "jquery",
+  "vite", "webpack", "babel",
+
+  // ---------- BACKEND ----------
+  "node", "nodejs", "express", "fastify", "nestjs",
+  "python", "django", "flask", "fastapi",
+  "java", "spring", "spring boot",
+  "c", "c++", "c sharp", "c#", ".net", "asp.net",
+  "php", "laravel", "symfony", "codeigniter",
+  "golang", "rust", "ruby", "ruby on rails",
+
+  // ---------- DATABASE ----------
+  "sql", "mysql", "postgresql", "mongodb", "redis", "sqlite",
+  "firebase", "supabase", "oracle", "mariadb", "dynamodb",
+
+  // ---------- CLOUD / DEVOPS ----------
+  "aws", "azure", "google cloud", "gcp",
+  "docker", "kubernetes", "jenkins", "ansible", "terraform",
+  "github actions", "ci", "cd", "linux", "nginx",
+
+  // ---------- MOBILE DEVELOPMENT ----------
+  "react native", "flutter", "kotlin", "swift", "ios", "android",
+
+  // ---------- DATA SCIENCE / AI / ML ----------
+  "machine learning", "deep learning", "data analysis", "data science",
+  "artificial intelligence", "ai", "nlp", "computer vision",
+  "tensorflow", "pytorch", "sklearn", "scikit", "matplotlib",
+  "numpy", "pandas", "power bi", "tablau", "tableau", "excel",
+
+  // ---------- PRODUCT / MANAGEMENT ----------
+  "product management", "project management", "agile", "scrum",
+  "kanban", "jira", "confluence", "stakeholder management",
+  "business analysis", "operations management", "hr management",
+  "customer service", "client handling", "risk management",
+
+  // ---------- FINANCE / BUSINESS ----------
+  "accounting", "finance", "budgeting", "forecasting",
+  "market research", "business development", "strategic planning",
+  "sales", "marketing", "seo", "sem", "content writing",
+  "digital marketing", "social media marketing", "brand management",
+
+  // ---------- BEHAVIOURAL / SOFT SKILLS ----------
+  "communication", "leadership", "teamwork", "critical thinking",
+  "problem solving", "creativity", "adaptability", "time management",
+  "decision making", "public speaking", "presentation skills",
+  "negotiation", "empathy", "collaboration", "analytical thinking",
+
+  // ---------- CYBERSECURITY ----------
+  "cyber security", "penetration testing", "ethical hacking",
+  "network security", "cryptography",
+  "vulnerability assessment", "owasp",
+
+  // ---------- GENERAL PROFESSIONAL SKILLS ----------
+  "ms office", "excel", "word", "powerpoint",
+  "email writing", "documentation", "report writing", "analysis",
+  "research", "problem analysis", "strategic thinking",
+  "client communication", "team leadership",
+
+  // ---------- DESIGN ----------
+  "figma", "adobe xd", "photoshop", "illustrator",
+  "ui design", "ux design", "wireframing", "prototyping",
+
+  // ---------- MISC ----------
+  "seo", "smm", "qa testing", "automation testing",
+  "selenium", "jest", "mocha", "cypress",
+  "blockchain", "web3", "solidity",
 ];
 
-/* ---------- Simple IndexedDB helpers for video blobs ---------- */
+/* ---------- IndexedDB helpers for storing video blobs ---------- */
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open("jobportal-db", 1);
@@ -69,7 +136,7 @@ async function deleteVideoBlob(studentId) {
 /* ------------------ StudentDashboard component ------------------ */
 
 export default function StudentDashboard() {
-  const student = JSON.parse(localStorage.getItem("currentStudent"));
+  const student = JSON.parse(localStorage.getItem("currentStudent") || "{}");
 
   /* profile info */
   const [info, setInfo] = useState({
@@ -86,17 +153,16 @@ export default function StudentDashboard() {
 
   /* video recording states */
   const [isRecording, setIsRecording] = useState(false);
-  const [recordedBlob, setRecordedBlob] = useState(null); // in-memory until saved to DB
-  const [videoUrl, setVideoUrl] = useState(null); // preview URL (from DB or recorded)
+  const [recordedBlob, setRecordedBlob] = useState(null);
+  const [videoUrl, setVideoUrl] = useState(null);
   const [hasSavedVideo, setHasSavedVideo] = useState(Boolean(student?.hasVideo));
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const recordedChunksRef = useRef([]);
 
-  /* small input handler */
   const h = (e) => setInfo({ ...info, [e.target.name]: e.target.value });
 
-  /* ------------- PDF extraction (same idea as before) ------------- */
+  /* ------------- PDF extraction ------------- */
   const extractSkillsFromPdf = async (file) => {
     if (!file) return [];
     try {
@@ -110,7 +176,9 @@ export default function StudentDashboard() {
         text += content.items.map((it) => it.str).join(" ");
       }
       const textLower = text.toLowerCase();
-      const extracted = SKILLS_VOCAB.filter((skill) => textLower.includes(skill.toLowerCase()));
+      const extracted = SKILLS_VOCAB.filter((skill) =>
+        textLower.includes(skill.toLowerCase())
+      );
       return extracted;
     } catch (err) {
       console.error("Failed to read resume:", err);
@@ -129,10 +197,10 @@ export default function StudentDashboard() {
       setResumeName(resumeFile.name);
     }
 
-    // combine skills
+    // combine skills: keep original user-entered plus extracted from resume
     const combinedSkills = [
       ...new Set([
-        ...info.skills.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+        ...String(info.skills || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
         ...resumeSkills,
       ]),
     ].join(", ");
@@ -140,22 +208,26 @@ export default function StudentDashboard() {
     // update local students array
     const all = getData("students");
     const updated = all.map((s) =>
-      s.id === student.id ? { ...s, ...info, skills: combinedSkills, resumeName: resumeFile ? resumeFile.name : s.resumeName || null } : s
+      s.id === student.id
+        ? {
+            ...s,
+            ...info,
+            skills: combinedSkills,
+            resumeName: resumeFile ? resumeFile.name : s.resumeName || null,
+          }
+        : s
     );
     saveData("students", updated);
 
-    // save to currentStudent in localStorage
+    // update currentStudent in localStorage
     const newCurrent = { ...(student || {}), ...info, skills: combinedSkills, resumeName: resumeFile ? resumeFile.name : student?.resumeName };
     localStorage.setItem("currentStudent", JSON.stringify(newCurrent));
 
-    // if we have a recorded blob (unsaved), save it to IndexedDB and mark student
+    // if recordedBlob present (unsaved), save it and mark student
     if (recordedBlob) {
       try {
         await saveVideoBlob(student.id, recordedBlob);
-        // update student metadata
-        const updated2 = all.map((s) =>
-          s.id === student.id ? { ...s, hasVideo: true } : s
-        );
+        const updated2 = all.map((s) => (s.id === student.id ? { ...s, hasVideo: true } : s));
         saveData("students", updated2);
         localStorage.setItem("currentStudent", JSON.stringify({ ...newCurrent, hasVideo: true }));
         setHasSavedVideo(true);
@@ -168,22 +240,62 @@ export default function StudentDashboard() {
     alert("Profile updated!");
   };
 
-  /* ---------------- Matching logic (recomputes when info.skills/cgpa/experience changes) ---------------- */
+  /* ---------------- Matching logic (JD tokenization) ---------------- */
   useEffect(() => {
     const jobs = getData("jobs") || [];
-    const skillsLower = (info.skills || "").toLowerCase();
-    const matches = jobs.filter((job) => {
-      if (!job.requiredSkill) return false;
-      const skillMatch = skillsLower.includes(job.requiredSkill.toLowerCase());
-      const cgpaOk = Number(info.cgpa || 0) >= Number(job.requiredCGPA || 0);
-      const expOk = Number(info.experience || 0) >= Number(job.requiredExperience || 0);
-      return skillMatch && cgpaOk && expOk;
-    });
+    const studentSkillsSet = new Set(
+      (info.skills || "")
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    // helper: tokenize JD/requiredSkill string into words/tokens
+    const tokenizeJD = (text) => {
+      if (!text) return [];
+      // split on anything that's not a letter/number/.,+,- (keeps node.js tokens)
+      return Array.from(
+        new Set(
+          text
+            .toLowerCase()
+            .split(/[^a-z0-9\.\+\-]+/i)
+            .map((t) => t.trim())
+            .filter(Boolean)
+        )
+      );
+    };
+
+    const matches = jobs
+      .map((job) => {
+        const requiredTokens = tokenizeJD(job.requiredSkill || "");
+        // count intersection
+        const matchedTokens = requiredTokens.filter((tok) =>
+          Array.from(studentSkillsSet).some((s) => {
+            // allow direct token matches (e.g. 'react') and also match variations: s includes tok or tok includes s
+            return s === tok || s.includes(tok) || tok.includes(s);
+          })
+        );
+
+        const skillMatch = matchedTokens.length > 0;
+        const cgpaOk = Number(info.cgpa || 0) >= Number(job.requiredCGPA || 0);
+        const expOk = Number(info.experience || 0) >= Number(job.requiredExperience || 0);
+
+        const isMatched = skillMatch && cgpaOk && expOk;
+
+        return {
+          job,
+          isMatched,
+          matchCount: matchedTokens.length,
+          matchedTokens,
+        };
+      })
+      .filter((r) => r.isMatched) // only keep matched jobs (same behaviour as before)
+      .map((r) => ({ ...r.job, matchCount: r.matchCount, matchedTokens: r.matchedTokens }));
+
     setMatchedJobs(matches);
   }, [info]);
 
   /* ---------------- Video recording functions ---------------- */
-
   async function startCamera() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       alert("Camera not supported in this browser.");
@@ -217,10 +329,8 @@ export default function StudentDashboard() {
       mr.onstop = async () => {
         const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
         setRecordedBlob(blob);
-        // preview
         const url = URL.createObjectURL(blob);
         setVideoUrl(url);
-
         // stop camera tracks
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
@@ -259,7 +369,6 @@ export default function StudentDashboard() {
     await deleteVideoBlob(student.id);
     setVideoUrl(null);
     setHasSavedVideo(false);
-    // update metadata
     const all = getData("students");
     const updated = all.map((s) => (s.id === student.id ? { ...s, hasVideo: false } : s));
     saveData("students", updated);
@@ -267,14 +376,9 @@ export default function StudentDashboard() {
   }
 
   useEffect(() => {
-    // on mount, load saved video preview if any
     loadSavedVideoPreview();
-
-    // clean up objectURL when unmount or when videoUrl changes
     return () => {
-      if (videoUrl) {
-        URL.revokeObjectURL(videoUrl);
-      }
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -314,7 +418,6 @@ export default function StudentDashboard() {
         <div className="glass-card mb-8">
           <h3 className="text-2xl font-semibold text-white mb-4">Record / Upload Your Video</h3>
 
-          {/* preview area */}
           <div className="mb-3">
             {videoUrl ? (
               <video controls src={videoUrl} className="w-full rounded-xl border border-white/20" />
@@ -325,7 +428,6 @@ export default function StudentDashboard() {
             )}
           </div>
 
-          {/* recording controls */}
           <div className="flex gap-3">
             {!isRecording ? (
               <button className="btn-primary px-4 py-2 rounded-xl" onClick={handleStartRecording}>Start Recording</button>
@@ -336,7 +438,6 @@ export default function StudentDashboard() {
             <button
               className="btn-glass px-4 py-2 rounded-xl"
               onClick={() => {
-                // allow user to choose file to upload as video instead of recording
                 const input = document.createElement("input");
                 input.type = "file";
                 input.accept = "video/*";
@@ -356,7 +457,6 @@ export default function StudentDashboard() {
             <button
               className="btn-glass px-4 py-2 rounded-xl ml-auto"
               onClick={() => {
-                // discard recorded in-memory blob
                 if (recordedBlob) {
                   setRecordedBlob(null);
                   setVideoUrl(null);
@@ -373,11 +473,9 @@ export default function StudentDashboard() {
             <button
               className="w-1/2 bg-blue-500/80 hover:bg-blue-600 text-white py-2 rounded-xl"
               onClick={async () => {
-                // Save recordedBlob to DB (if any) immediately without saving other profile data
                 if (!recordedBlob) return alert("No recorded video to save. Record or upload first.");
                 try {
                   await saveVideoBlob(student.id, recordedBlob);
-                  // update student metadata
                   const all = getData("students");
                   const updated = all.map((s) => (s.id === student.id ? { ...s, hasVideo: true } : s));
                   saveData("students", updated);
@@ -410,10 +508,16 @@ export default function StudentDashboard() {
           ) : (
             matchedJobs.map((job) => (
               <div key={job.id} className="p-4 bg-white/10 rounded-xl border border-white/20 mb-3">
-                <h4 className="text-xl text-white font-bold">{job.title}</h4>
-                <p className="text-white/70">Required Skill: {job.requiredSkill}</p>
+                <div className="flex justify-between items-start">
+                  <h4 className="text-xl text-white font-bold">{job.title}</h4>
+                  <span className="text-sm text-white/70">Matches: {job.matchCount || 0}</span>
+                </div>
+                <p className="text-white/70">Required (JD): {job.requiredSkill}</p>
                 <p className="text-white/70">CGPA ≥ {job.requiredCGPA}</p>
                 <p className="text-white/70">Experience ≥ {job.requiredExperience} years</p>
+                {job.matchedTokens && job.matchedTokens.length > 0 && (
+                  <p className="mt-2 text-white/80 text-sm">Matched tokens: {job.matchedTokens.join(", ")}</p>
+                )}
               </div>
             ))
           )}
